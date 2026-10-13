@@ -25,7 +25,12 @@ function updateLastUpdated(){
   host.textContent=date&&!isNaN(date)?date.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";
 }
 
-const ATTRACTION_ORDER = ["BONDINHOS","SKYGLASS","CASCATA"];
+// Cada item foi coletado SOZINHO (escala própria 0-100) em D.series.
+// A consulta com os 5 JUNTOS (escala comum) fica em CMP e é a única usada para comparar níveis.
+const ATTRACTION_ORDER = ["PARQUE","SKYGLASS","SNOWLAND","BONDINHOS","CASCATA"];
+const SERIES_COLORS = {PARQUE:"#004B13",SKYGLASS:"#3B82C4",SNOWLAND:"#8E6CC9",BONDINHOS:"#E08A2E",CASCATA:"#C9A227"};
+// Comparativo Parque × atrações: 5 itens na MESMA consulta (escala comum)
+let CMP = window.CARACOL_COMPARISON_DATA || {series:[]};
 function setupFilters(){
   const marketOrder = ATTRACTION_ORDER;
   marketFilter.innerHTML = marketOrder
@@ -64,6 +69,39 @@ function lineOptions(){
 }
 function barColors(values){ return values.map(v=>v>=0 ? ORANGE : "#c5c8cc"); }
 
+const LOW_VOLUME = 5; // média < 5 na escala conjunta (líder = 100) => baixo volume de busca
+function cmpMean(code){ const v=cmpRows(code).map(r=>r.value); return v.length?mean(v):NaN; }
+function isLowVolume(code){ const m=cmpMean(code); return Number.isFinite(m)&&m<LOW_VOLUME; }
+function labelOf(code){ return namesFrom(code)+(isLowVolume(code)?"*":""); }
+// Momentum: últimos 3 meses contra os MESMOS meses do ano anterior (neutraliza a sazonalidade)
+function momentumYoY(rows,year){
+  let s=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
+  if(year) s=s.filter(r=>r.year===year);
+  const last=s.slice(-3); if(last.length<3) return NaN;
+  const prev=last.map(r=>rows.find(x=>x.year===r.year-1&&x.month===r.month)).filter(Boolean);
+  if(prev.length<3) return NaN;
+  const pm=mean(prev.map(r=>r.value));
+  return pm ? mean(last.map(r=>r.value))/pm-1 : NaN;
+}
+// Volatilidade: oscilação em torno da tendência linear, relativa à média (não conta crescimento como oscilação)
+function detrendedCV(vals){
+  const n=vals.length; if(n<4) return NaN;
+  const m=mean(vals); if(!m) return NaN;
+  const tm=(n-1)/2; let sxy=0,sxx=0;
+  vals.forEach((v,i)=>{sxy+=(i-tm)*(v-m); sxx+=(i-tm)**2;});
+  const b=sxy/sxx;
+  return stdev(vals.map((v,i)=>v-(m+b*(i-tm))))/m;
+}
+function sortedVals(rows){ return [...rows].sort((a,b)=>a.date.localeCompare(b.date)).map(r=>r.value); }
+function cmpRows(code){ return (CMP.series||[]).filter(r=>r.marketCode===code); }
+function pctPlain(v){ return Number.isFinite(v) ? `${(v*100).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}%` : "—"; }
+function rollingYoy(rows){ // últimos 12 meses vs 12 anteriores
+  const s=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
+  const cur=s.slice(-12), prev=s.slice(-24,-12);
+  if(cur.length<12||prev.length<12) return NaN;
+  const pm=mean(prev.map(r=>r.value));
+  return pm ? mean(cur.map(r=>r.value))/pm-1 : NaN;
+}
 function updateKPIs(){
   const code=selectedMarket(), year=selectedYear();
   let base = marketRows(code);
@@ -71,7 +109,17 @@ function updateKPIs(){
   const vals=base.map(r=>r.value);
   const avg=mean(vals);
   document.querySelector("#kpiAvg").textContent=fmt(avg);
-  document.querySelector("#kpiAvgSub").textContent=year ? `${year} · ${base[0]?.market||""}` : "período completo";
+  const lv=document.querySelector("#lowVolumeNote");
+  if(lv){
+    if(isLowVolume(code)){
+      lv.hidden=false;
+      lv.innerHTML=`<strong>Atenção: baixo volume de busca.</strong> ${namesFrom(code)} tem média de ${fmt(cmpMean(code))} na escala conjunta (em que o líder chega a 100). Percentuais, picos e sazonalidade desta série refletem muito ruído e não devem ser lidos como tendência confiável.`;
+    } else lv.hidden=true;
+  }
+  const cmpBase=cmpRows(code).filter(r=>!year||r.year===year);
+  const cmpAvg=mean(cmpBase.map(r=>r.value));
+  const cmpTxt=Number.isFinite(cmpAvg)?` · escala conjunta: ${fmt(cmpAvg)}`:"";
+  document.querySelector("#kpiAvgSub").textContent=(year ? `${year} · ${base[0]?.market||""}` : `período completo · ${base[0]?.market||""}`)+cmpTxt;
 
   let yoy=NaN;
   if(year){
@@ -81,26 +129,25 @@ function updateKPIs(){
       const [c,p]=monthsComparable(cur,prev); yoy=mean(c.map(r=>r.value))/mean(p.map(r=>r.value))-1;
     }
   }
+  if(!year) yoy=rollingYoy(marketRows(code));
   const yoyEl=document.querySelector("#kpiYoy"); yoyEl.textContent=pct(yoy); yoyEl.className=colorMetric(yoy);
-  document.querySelector("#kpiYoySub").textContent=year?`vs. ${year-1}`:"selecione um ano";
+  document.querySelector("#kpiYoySub").textContent=year?`vs. ${year-1}`:"12 meses vs. 12 anteriores";
 
   let momentum=NaN;
-  if(year){
-    const arr=marketRows(code).filter(r=>r.year===year).sort((a,b)=>a.month-b.month);
-    if(arr.length>=6){
-      momentum=mean(arr.slice(-3).map(r=>r.value))/mean(arr.slice(-6,-3).map(r=>r.value))-1;
-    }
-  }
+  momentum=momentumYoY(marketRows(code),year);
   const mEl=document.querySelector("#kpiMomentum"); mEl.textContent=pct(momentum); mEl.className=colorMetric(momentum);
 
   const current=base.length ? [...base].sort((a,b)=>a.date.localeCompare(b.date)).at(-1) : null;
   const currentEl=document.querySelector("#kpiCurrent");
   const currentSub=document.querySelector("#kpiCurrentSub");
   if(currentEl) currentEl.textContent=current?fmt(current.value,0):"—";
-  if(currentSub) currentSub.textContent=current?`${months[current.month-1]}/${current.year} · último mês disponível`:"último mês disponível";
+  if(currentSub){
+    const cm=current?cmpRows(code).find(r=>r.date===current.date):null;
+    currentSub.textContent=current?`${months[current.month-1]}/${current.year} · ${year?"último mês do período":"último mês disponível"}`+(cm?` · escala conjunta: ${fmt(cm.value)}`:""):"último mês disponível";
+  }
 
-  const cv=vals.length>1 && mean(vals)!==0 ? stdev(vals)/mean(vals) : NaN;
-  document.querySelector("#kpiVol").textContent=Number.isFinite(cv)?pct(cv):"—";
+  const cv=detrendedCV(sortedVals(base));
+  document.querySelector("#kpiVol").textContent=Number.isFinite(cv)?pctPlain(cv):"—";
 }
 
 function updateTrend(){
@@ -120,7 +167,7 @@ function updateTrend(){
   charts.trend=new Chart(document.querySelector("#trendChart"),{
     type:"line",
     data:{labels:chartRows.map(r=>new Date(r.date+"T00:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"})),
-      datasets:[{data:chartRows.map(r=>r.value),borderColor:ORANGE,backgroundColor:"rgba(245,123,37,.08)",pointRadius:2,pointHoverRadius:5,borderWidth:2.4,tension:.28,fill:true}]},
+      datasets:[{data:chartRows.map(r=>r.value),borderColor:ORANGE,backgroundColor:"rgba(0,75,19,.08)",pointRadius:2,pointHoverRadius:5,borderWidth:2.4,tension:.28,fill:true}]},
     options:lineOptions()
   });
 }
@@ -147,13 +194,22 @@ function updateComparison(){
 }
 
 function seasonIndexFor(code){
-  const data=marketRows(code);
-  const overall=mean(data.map(r=>r.value));
-  return months.map((_,i)=>mean(data.filter(r=>r.month===i+1).map(r=>r.value))/overall);
+  // Cada ano é dividido pela própria média e só anos completos (12 meses) entram:
+  // assim o crescimento do ano e o ano parcial não viram "sazonalidade".
+  const data=marketRows(code), byYear={};
+  data.forEach(r=>{(byYear[r.year]=byYear[r.year]||[]).push(r);});
+  let years=Object.keys(byYear).filter(y=>byYear[y].length>=12);
+  if(!years.length) years=Object.keys(byYear);
+  const acc=Array.from({length:12},()=>[]);
+  years.forEach(y=>{
+    const m=mean(byYear[y].map(r=>r.value)); if(!m) return;
+    byYear[y].forEach(r=>acc[r.month-1].push(r.value/m));
+  });
+  return acc.map(a=>a.length?mean(a):NaN);
 }
 function seasonColor(v){
   const t=Math.max(0,Math.min(1,(v-.65)/.7));
-  const a=[255,246,239], b=[243,112,33];
+  const a=[243,248,243], b=[96,170,120];
   return `rgb(${a.map((x,i)=>Math.round(x+(b[i]-x)*t)).join(",")})`;
 }
 function updateSeasonality(){
@@ -172,29 +228,24 @@ function metricByMarket(metric){
     const all=marketRows(code);
 
     if(metric==="yoy"){
-      if(!yr) return;
+      if(!yr){ const v=rollingYoy(all); if(Number.isFinite(v)) result.push({code,name:labelOf(code),v}); return; }
       const cur=all.filter(r=>r.year===yr), prev=all.filter(r=>r.year===yr-1);
       if(!cur.length||!prev.length) return;
       const [c,p]=monthsComparable(cur,prev);
       const prevMean=mean(p.map(r=>r.value));
       if(!Number.isFinite(prevMean) || prevMean===0) return;
-      result.push({code,name:namesFrom(code),v:mean(c.map(r=>r.value))/prevMean-1});
+      result.push({code,name:labelOf(code),v:mean(c.map(r=>r.value))/prevMean-1});
     }
 
     if(metric==="momentum"){
-      const d=(yr?all.filter(r=>r.year===yr):all).sort((a,b)=>a.date.localeCompare(b.date));
-      if(d.length<6) return;
-      const previous=mean(d.slice(-6,-3).map(r=>r.value));
-      if(!Number.isFinite(previous) || previous===0) return;
-      result.push({code,name:namesFrom(code),v:mean(d.slice(-3).map(r=>r.value))/previous-1});
+      const v=momentumYoY(all,yr);
+      if(Number.isFinite(v)) result.push({code,name:labelOf(code),v});
     }
 
     if(metric==="vol"){
       const d=yr?all.filter(r=>r.year===yr):all;
-      const vals=d.map(r=>r.value);
-      const avg=mean(vals);
-      if(vals.length<2 || !Number.isFinite(avg) || avg===0) return;
-      result.push({code,name:namesFrom(code),v:stdev(vals)/avg});
+      const v=detrendedCV(sortedVals(d));
+      if(Number.isFinite(v)) result.push({code,name:labelOf(code),v});
     }
   });
   return result.sort((a,b)=>b.v-a.v);
@@ -219,22 +270,66 @@ function makeBar(id,key,data,isPct=false){
   });
 }
 function attractionRankingData(){
+  // Ranking de NÍVEL só faz sentido na escala comum (consulta com os 5 juntos).
   const yr=selectedYear();
+  const useCmp=(CMP.series||[]).length>0;
+  const src=useCmp?CMP.series:D.series;
   return ATTRACTION_ORDER
-    .filter(c=>D.series.some(r=>r.marketCode===c))
+    .filter(c=>src.some(r=>r.marketCode===c))
     .map(code=>{
-      const rows=marketRows(code).filter(r=>!yr||r.year===yr);
+      const rows=src.filter(r=>r.marketCode===code&&(!yr||r.year===yr));
       const latest=[...rows].sort((a,b)=>a.date.localeCompare(b.date)).at(-1);
-      return {name:namesFrom(code), v: latest ? latest.value : NaN};
+      return {name:(src.find(r=>r.marketCode===code)?.market||code)+(isLowVolume(code)?"*":""), v: latest ? latest.value : NaN};
     })
     .filter(x=>Number.isFinite(x.v))
     .sort((a,b)=>b.v-a.v);
 }
+function updateLowVolumeFoot(){
+  const el=document.querySelector("#lowVolumeFoot"); if(!el) return;
+  const low=ATTRACTION_ORDER.filter(isLowVolume);
+  el.hidden=!low.length;
+  if(low.length) el.textContent=`* Baixo volume de busca (${low.map(namesFrom).join(", ")}): variações percentuais e picos desta série oscilam muito por pouca base e devem ser lidos com cautela.`;
+}
 function updateMarketCharts(){
+  updateLowVolumeFoot();
   makeBar("#rankingChart","ranking",attractionRankingData(),false);
   makeBar("#yoyChart","yoy",metricByMarket("yoy"),true);
   makeBar("#momentumChart","momentum",metricByMarket("momentum"),true);
   makeBar("#volatilityChart","volatility",metricByMarket("vol"),true);
+}
+
+function updateParkComparison(){
+  const section=document.querySelector("#parkCompareCard");
+  const rows0=(CMP.series||[]);
+  if(!section) return;
+  if(!rows0.length){ section.hidden=true; return; }
+  section.hidden=false;
+  const yr=selectedYear();
+  const rows=rows0.filter(r=>!yr||r.year===yr);
+  const dates=[...new Set(rows.map(r=>r.date))].sort();
+  const order=ATTRACTION_ORDER.filter(c=>rows.some(r=>r.marketCode===c));
+  const nameOf=c=>rows0.find(r=>r.marketCode===c)?.market||c;
+  const label=d=>{const [y,m]=d.split("-");return `${months[+m-1]}/${y.slice(2)}`;};
+  destroy("parkLine");
+  charts.parkLine=new Chart(document.querySelector("#parkLineChart"),{
+    type:"line",
+    data:{labels:dates.map(label),datasets:order.map(c=>({
+      label:nameOf(c)+(isLowVolume(c)?"*":""),
+      data:dates.map(d=>rows.find(r=>r.date===d&&r.marketCode===c)?.value??null),
+      borderColor:SERIES_COLORS[c],backgroundColor:SERIES_COLORS[c],
+      borderWidth:c==="PARQUE"?3.5:2,pointRadius:0,pointHoverRadius:4,tension:.3,spanGaps:true
+    }))},
+    options:{...standardOptions(),plugins:{legend:{display:true,position:"bottom",labels:{usePointStyle:true,boxWidth:8}},tooltip:{backgroundColor:"#1D232A",mode:"index",intersect:false}},interaction:{mode:"index",intersect:false}}
+  });
+  const latest=order.map(c=>{
+    const r=rows.filter(x=>x.marketCode===c).sort((a,b)=>a.date.localeCompare(b.date)).at(-1);
+    return {code:c,name:nameOf(c),v:r?r.value:NaN};
+  }).filter(x=>Number.isFinite(x.v)).sort((a,b)=>b.v-a.v);
+  const note=document.querySelector("#parkCompareNote");
+  if(note&&dates.length&&latest.length){
+    const p=latest.find(x=>x.code==="PARQUE");
+    note.textContent=`Consulta conjunta (escala comum). Em ${label(dates.at(-1))}, ${latest[0].name} lidera`+(p&&latest[0].code!=="PARQUE"?`; o Parque do Caracol está em ${latest.indexOf(p)+1}º de ${latest.length}.`:".");
+  }
 }
 
 function updatePeaks(){
@@ -242,32 +337,39 @@ function updatePeaks(){
   const yr=selectedYear(); if(yr)data=data.filter(r=>r.year===yr);
 
   data=[...data].sort((a,b)=>b.value-a.value).slice(0,5);
-  document.querySelector("#peaksTable").innerHTML=data.map((r,i)=>`
+  const lowNote=isLowVolume(selectedMarket())?`<small style="display:block;margin-top:8px;color:#6B5200">Baixo volume de busca: picos desta série podem ser apenas ruído.</small>`:"";
+  document.querySelector("#peaksTable").innerHTML=lowNote+data.map((r,i)=>`
     <div class="peak-row"><div class="peak-rank">${i+1}</div><div><strong>${months[r.month-1]} ${r.year}</strong><small>${r.market||namesFrom(r.marketCode)}</small></div><strong>${fmt(r.value,0)}</strong></div>`).join("");
 }
 
 function updateInsight(){
-  const yr=selectedYear(), code=selectedMarket();
-  let text="";
-  if(yr){
-    const yoy=metricByMarket("yoy");
-    const mom=metricByMarket("momentum");
-    if(false && yoy.length){
-      const best=yoy[0], worst=yoy.at(-1);
-      const hot=mom[0];
-      text=`Em ${yr}, ${best.name} apresenta a maior variação anual entre os mercados exibidos (${pct(best.v)}), enquanto ${worst.name} registra a menor (${pct(worst.v)}). No recorte de momentum, ${hot?.name||"—"} aparece com o sinal mais favorável nos meses mais recentes. Use os picos e a sazonalidade para investigar se essa mudança é estrutural ou ligada a períodos específicos.`;
+  const yr=selectedYear(), code=selectedMarket(), name=namesFrom(code);
+  const all=marketRows(code), seasonal=seasonIndexFor(code);
+  const valid=seasonal.map((v,i)=>[v,i]).filter(([v])=>Number.isFinite(v));
+  const bestMonth=valid.length?valid.reduce((a,b)=>b[0]>a[0]?b:a)[1]:-1;
+  const season=bestMonth>=0?` Considerando só anos completos, ${months[bestMonth]} é historicamente o mês mais forte (índice sazonal ${fmt(seasonal[bestMonth],2)}).`:"";
+  let text;
+  if(isLowVolume(code)){
+    text=`${name} tem volume de busca muito baixo (média de ${fmt(cmpMean(code))} na escala conjunta). Com tão pouca base, variações percentuais, picos e sazonalidade refletem principalmente ruído; use esta série apenas como referência qualitativa.`;
+  } else {
+    let y=NaN, ref="";
+    if(yr){
+      const cur=all.filter(r=>r.year===yr), prev=all.filter(r=>r.year===yr-1);
+      if(cur.length&&prev.length){const [c,p]=monthsComparable(cur,prev); y=mean(c.map(r=>r.value))/mean(p.map(r=>r.value))-1;}
+      ref=`o interesse médio de ${yr} está ${Number.isFinite(y)?pct(y):"sem comparação disponível"} frente ao ano anterior (meses equivalentes)`;
     } else {
-      const all=marketRows(code), cur=all.filter(r=>r.year===yr), prev=all.filter(r=>r.year===yr-1);
-      let y=NaN;if(cur.length&&prev.length){const [c,p]=monthsComparable(cur,prev);y=mean(c.map(r=>r.value))/mean(p.map(r=>r.value))-1;}
-      const seasonal=seasonIndexFor(code); const bestMonth=seasonal.indexOf(Math.max(...seasonal));
-      text=`No mercado ${namesFrom(code)}, o interesse médio de ${yr} está ${Number.isFinite(y)?pct(y):"sem comparação disponível"} frente ao ano anterior. Historicamente, ${months[bestMonth]} é o mês com maior índice sazonal relativo. O gráfico de tendência permite restringir uma janela específica para investigar picos ou quedas sem alterar os demais indicadores do dashboard.`;
+      y=rollingYoy(all);
+      ref=`os últimos 12 meses estão ${Number.isFinite(y)?pct(y):"sem comparação disponível"} frente aos 12 anteriores`;
     }
-  } else text="Selecione um ano para gerar uma leitura comparativa automática contra o período anterior.";
+    const mom=momentumYoY(all,yr);
+    const momTxt=Number.isFinite(mom)?` Os últimos três meses estão ${pct(mom)} em relação aos mesmos meses do ano anterior.`:"";
+    text=`Para ${name}, ${ref}.${momTxt}${season}`;
+  }
   document.querySelector("#autoInsight").textContent=text;
 }
 
 function updateAll(){
-  updateLastUpdated(); updateKPIs(); updateTrend(); updateComparison(); updateSeasonality(); updateMarketCharts(); updatePeaks(); updateInsight();
+  updateLastUpdated(); updateKPIs(); updateTrend(); updateComparison(); updateSeasonality(); updateMarketCharts(); updateParkComparison(); updatePeaks(); updateInsight();
 }
 marketFilter.addEventListener("change",updateAll);
 yearFilter.addEventListener("change",()=>{startDate.value="";endDate.value="";updateAll();});
@@ -348,12 +450,19 @@ function refreshFiltersFromData(){
   startDate.value="";endDate.value="";
 }
 
+function loadComparisonSheet(wb){
+  const name=wb.SheetNames.find(n=>normalizeHeader(n)==="comparativo_parque");
+  if(!name) return;
+  try{ CMP={...CMP,series:rowsFromWorksheet(wb.Sheets[name])}; }
+  catch(err){ console.warn("Aba comparativo_parque inválida:",err); }
+}
 function workbookDataFromBuffer(buf,sourceFile,updatedAt){
     const wb=XLSX.read(buf,{type:"array",cellDates:true});
     const preferred=wb.SheetNames.find(n=>normalizeHeader(n)==="serie_mensal");
     const ws=wb.Sheets[preferred||wb.SheetNames[0]];
     const series=rowsFromWorksheet(ws);
     if(!series.length) throw new Error("A planilha não contém linhas válidas em serie_mensal.");
+    loadComparisonSheet(wb);
     return {
       ...D,
       series,
@@ -399,6 +508,7 @@ async function handleUpload(file){
     const preferred=wb.SheetNames.find(n=>normalizeHeader(n)==="serie_mensal");
     const ws=wb.Sheets[preferred||wb.SheetNames[0]];
     const series=rowsFromWorksheet(ws);
+    loadComparisonSheet(wb);
     D={
       ...D,
       series,
@@ -444,3 +554,88 @@ loadRepositoryWorkbook().then(ok=>{
     document.querySelector("#autoInsight").textContent="Nenhuma base pôde ser carregada. Verifique se data/dados.xlsx existe no repositório.";
   }
 });
+
+
+/* ---------- Balões explicativos nos títulos (passe o mouse, toque ou use Tab) ---------- */
+const TIPS = {
+  kpis:{what:"Resumo da atração escolhida no filtro “Parque / atração”, dentro do ano selecionado (ou do período completo, se estiver em “Todos os anos”).",
+        read:"Cada item foi coletado sozinho no Google Trends, então estes números são relativos ao pico da própria atração. Para comparar o tamanho de uma atração com o de outra, use a seção “Comparação entre atrações”."},
+  kpiCurrent:{what:"Índice de interesse no último mês do período selecionado.",
+        read:"Vai de 0 a 100, em que 100 é o mês de maior interesse da própria série. Logo abaixo, “escala conjunta” mostra o valor na consulta com os 5 itens juntos, que é o número comparável entre atrações."},
+  kpiAvg:{what:"Média mensal do índice no período selecionado.",
+        read:"Resume o nível geral de interesse. Para saber o tamanho real frente às outras atrações, olhe o valor em “escala conjunta” logo abaixo."},
+  kpiYoy:{what:"Quanto o interesse médio mudou em relação ao ano anterior.",
+        read:"Com um ano selecionado, compara os meses equivalentes (ex.: jan–set de 2026 contra jan–set de 2025). Em “Todos os anos”, compara os últimos 12 meses com os 12 anteriores. Verde = alta, vermelho = queda. Em séries de baixo volume, percentuais grandes podem ser só ruído."},
+  kpiMomentum:{what:"Se o interesse recente está ganhando ou perdendo força.",
+        read:"Compara os últimos 3 meses com os mesmos 3 meses do ano anterior, para não confundir sazonalidade com tendência. Por exemplo, +10% significa 10% mais interesse do que no mesmo período do ano passado."},
+  kpiVol:{what:"Quão irregular é o interesse de um mês para o outro.",
+        read:"É a oscilação em torno da tendência, em % da média (o crescimento ao longo do tempo não conta como oscilação). Quanto maior, mais imprevisível é a série. Vale mais para comparar atrações entre si do que como número isolado."},
+  trend:{what:"Evolução mês a mês do índice de interesse da atração escolhida no filtro.",
+        read:"O eixo vai de 0 a 100, em que 100 é o mês de maior interesse da própria série. Observe a direção da linha e os picos. Os campos “De / Até” recortam apenas este gráfico. Para comparar atrações entre si, use o gráfico da seção de comparação."},
+  behavior:{what:"Duas leituras do comportamento da atração selecionada: este ano contra o anterior e o perfil sazonal.",
+        read:"Use o primeiro gráfico para ver se o ano está acima ou abaixo do anterior, e o segundo para saber quais meses costumam ser fortes."},
+  yearCompare:{what:"O ano selecionado (linha verde contínua) contra o ano anterior (linha cinza tracejada), mês a mês.",
+        read:"Onde a linha verde está acima da cinza, o interesse naquele mês cresceu em relação ao ano anterior. Só aparece quando há um ano selecionado."},
+  seasonal:{what:"Quais meses do ano costumam ter mais ou menos interesse.",
+        read:"Cada número compara o mês com a média do próprio ano: 1,00 é um mês médio e 1,50 é 50% acima da média. Quanto mais escuro o verde, mais forte o mês. Só anos completos entram, para que o crescimento do ano não pareça sazonalidade."},
+  compareSection:{what:"O Parque do Caracol e as 4 atrações lado a lado.",
+        read:"Esta seção não responde ao filtro de atração (o filtro de ano continua valendo). O gráfico de linhas e o ranking usam a consulta conjunta, comparável em tamanho; variação anual, momentum e volatilidade são relativos à série de cada item. O asterisco (*) marca séries de baixo volume de busca."},
+  parkLine:{what:"Evolução mensal dos 5 itens, coletados juntos na mesma consulta do Google Trends.",
+        read:"Como compartilham a mesma escala, a altura das linhas é comparável: quanto mais alta, maior o interesse relativo. O 100 é o maior ponto entre todos os itens no período."},
+  ranking:{what:"A posição de cada item no último mês disponível do período.",
+        read:"Barras maiores significam mais interesse relativo. Os valores estão na escala conjunta, por isso podem ser comparados entre os itens."},
+  yoyChart:{what:"Quanto cada item cresceu ou caiu em relação ao ano anterior.",
+        read:"Barras verdes indicam alta e cinzas indicam queda. Sem ano selecionado, compara 12 meses contra 12. É um percentual sobre a base de cada item: um item pequeno pode ter percentual grande com pouca mudança real (veja o *)."},
+  momentumChart:{what:"Quais itens ganharam ou perderam força recentemente.",
+        read:"Compara os últimos 3 meses com os mesmos meses do ano anterior. Barras para cima: ganhando força. Barras para baixo: perdendo força."},
+  volChart:{what:"Quão irregular é o interesse de cada item ao longo do tempo.",
+        read:"É a oscilação mensal em torno da tendência, em % da média. Barra alta significa série instável e difícil de prever. Não indica se o interesse está subindo ou caindo."},
+  diagnostic:{what:"Os pontos de maior interesse da atração selecionada.",
+        read:"Use para cruzar com campanhas, férias, feriados, eventos e notícias e entender o que gerou os picos."},
+  peaks:{what:"Os 5 meses de maior índice da atração e do período selecionados.",
+        read:"O número é o índice de 0 a 100 da própria série (100 é o maior mês). Em séries de baixo volume, picos podem ser apenas ruído."},
+  insight:{what:"Um resumo em texto, gerado automaticamente a partir dos números do filtro atual.",
+        read:"Muda quando você troca de atração ou de ano. É um apoio à leitura, não uma conclusão: confirme sempre nos gráficos."}
+};
+(function(){
+  const pop=document.createElement("div");
+  pop.className="tip-pop"; pop.setAttribute("role","tooltip");
+  document.body.appendChild(pop);
+  let current=null, via="hover";
+  function place(el){
+    const r=el.getBoundingClientRect(), pw=pop.offsetWidth, ph=pop.offsetHeight;
+    const left=Math.min(Math.max(12,r.left),Math.max(12,window.innerWidth-pw-12));
+    let top=r.bottom+10;
+    if(top+ph>window.innerHeight-12) top=Math.max(12,r.top-ph-10);
+    pop.style.left=left+"px"; pop.style.top=top+"px";
+  }
+  function show(el,how){
+    const t=TIPS[el.dataset.tip]; if(!t) return;
+    via=how||"hover";
+    pop.innerHTML=`<p><b>O que mostra</b>${t.what}</p><p><b>Como ler</b>${t.read}</p>`;
+    pop.style.visibility="visible"; pop.classList.add("show"); place(el); current=el;
+  }
+  function hide(){ pop.classList.remove("show"); current=null; }
+  document.querySelectorAll("[data-tip]").forEach(el=>{ el.tabIndex=0; });
+  let touchAt=0;
+  document.addEventListener("touchstart",()=>{ touchAt=Date.now(); },{passive:true,capture:true});
+  document.addEventListener("mouseover",e=>{
+    const el=e.target.closest&&e.target.closest("[data-tip]");
+    if(el){ if(el!==current) show(el); }
+    else if(current && via==="hover" && Date.now()-touchAt>1000) hide(); // ignora o mouseover emulado após um toque
+  });
+  document.addEventListener("focusin",e=>{ const el=e.target.closest&&e.target.closest("[data-tip]"); if(el) show(el,"focus"); });
+  document.addEventListener("focusout",hide);
+  document.addEventListener("click",e=>{
+    const el=e.target.closest&&e.target.closest("[data-tip]");
+    if(el) show(el); else hide();
+  });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") hide(); });
+  window.addEventListener("scroll",()=>{
+    if(!current) return;
+    const r=current.getBoundingClientRect();
+    const out=r.bottom<0||r.top>window.innerHeight;
+    pop.style.visibility=out?"hidden":"visible"; // some só enquanto o título está fora da tela
+    if(!out) place(current);
+  },{passive:true});
+})();

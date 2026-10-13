@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Google Trends — Parque do Caracol</title>
-  <meta name="description" content="Dashboard de inteligência de mercado do Parque do Caracol com dados do Google Trends, comparando Bondinhos Aéreos, Skyglass e Pé da Cascata no Brasil.">
+  <meta name="description" content="Dashboard de inteligência de mercado do Parque do Caracol com dados do Google Trends, acompanhando o Parque do Caracol e comparando Skyglass, Snowland, Bondinhos Canela e Pé da Cascata no Brasil.">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="caracol-premium.css?v=20260904-1">
 </head>
@@ -15,7 +15,6 @@
       <div class="title-block">
         <div class="eyebrow"><span></span> Inteligência de Mercado · Google Trends</div>
         <h1>Parque do <em>Caracol</em></h1>
-        <p>Interesse de busca no Brasil, evolução temporal, sazonalidade e sinais de oportunidade por atração.</p>
       </div>
       <div class="header-meta">
         <div class="meta-label">Mercado analisado</div>
@@ -30,7 +29,7 @@
     <section class="filter-bar" aria-label="Filtros do dashboard">
       <div class="filters-left">
         <div class="field">
-          <label for="marketFilter">Atração</label>
+          <label for="marketFilter">Parque / atração</label>
           <select id="marketFilter"></select>
         </div>
         <div class="field field-small">
@@ -54,7 +53,7 @@
             <input type="file" id="fileUpload" accept=".xlsx,.xls,.csv" hidden>
             <button id="showFormatHelp" class="link-btn" type="button">Ver formato aceito</button>
             <div id="formatHelp" class="format-help hidden">
-              <code>data</code> · <code>mercado_codigo</code> (atração) · <code>mercado</code> (nome da atração) · <code>indice_trends</code>
+              <code>data</code> · <code>mercado_codigo</code> (PARQUE, SKYGLASS, SNOWLAND, BONDINHOS, CASCATA) · <code>mercado</code> (nome) · <code>indice_trends</code>
             </div>
           </div>
         </details>
@@ -65,36 +64,37 @@
       <div class="section-intro">
         <div>
           <span class="section-kicker">Visão geral</span>
-          <h2>Desempenho da atração selecionada</h2>
+          <h2 data-tip="kpis">Desempenho da atração selecionada</h2>
         </div>
-        <p>Os indicadores abaixo respondem aos filtros de atração e ano.</p>
+        <p>Os indicadores abaixo respondem aos filtros de atração e ano. Cada item foi coletado <strong>sozinho</strong> (escala 0–100 própria).</p>
       </div>
 
+      <div class="low-volume-note" id="lowVolumeNote" hidden></div>
       <div class="kpi-grid">
         <article class="kpi-card primary-kpi">
-          <div class="kpi-label">Interesse atual</div>
+          <div class="kpi-label" data-tip="kpiCurrent">Interesse atual</div>
           <strong id="kpiCurrent">—</strong>
           <small id="kpiCurrentSub">último mês disponível</small>
         </article>
         <article class="kpi-card">
-          <div class="kpi-label">Interesse médio</div>
+          <div class="kpi-label" data-tip="kpiAvg">Interesse médio</div>
           <strong id="kpiAvg">—</strong>
           <small id="kpiAvgSub">—</small>
         </article>
         <article class="kpi-card">
-          <div class="kpi-label">Variação anual</div>
+          <div class="kpi-label" data-tip="kpiYoy">Variação anual</div>
           <strong id="kpiYoy">—</strong>
           <small id="kpiYoySub">—</small>
         </article>
         <article class="kpi-card">
-          <div class="kpi-label">Momentum recente</div>
+          <div class="kpi-label" data-tip="kpiMomentum">Momentum recente</div>
           <strong id="kpiMomentum">—</strong>
-          <small>3 meses vs. 3 anteriores</small>
+          <small>3 meses vs. mesmos meses do ano anterior</small>
         </article>
         <article class="kpi-card">
-          <div class="kpi-label">Volatilidade</div>
+          <div class="kpi-label" data-tip="kpiVol">Volatilidade</div>
           <strong id="kpiVol">—</strong>
-          <small>coeficiente de variação</small>
+          <small>oscilação sem a tendência</small>
         </article>
       </div>
     </section>
@@ -103,7 +103,7 @@
       <div class="panel-head">
         <div>
           <span class="section-kicker">Tendência</span>
-          <h2>Interesse ao longo do tempo</h2>
+          <h2 data-tip="trend">Interesse ao longo do tempo</h2>
           <p>Evolução mensal da atração selecionada. O intervalo abaixo afeta somente este gráfico.</p>
         </div>
         <div class="date-controls">
@@ -119,20 +119,20 @@
       <div class="section-intro">
         <div>
           <span class="section-kicker">Comportamento</span>
-          <h2>Como a demanda se distribui no tempo</h2>
+          <h2 data-tip="behavior">Como a demanda se distribui no tempo</h2>
         </div>
         <p>Comparação anual e padrão sazonal da atração selecionada.</p>
       </div>
       <div class="two-col behavior-grid">
         <article class="panel">
           <div class="panel-head compact-head">
-            <div><span class="mini-label">Comparativo</span><h3 id="comparisonTitle">Ano selecionado × anterior</h3><p>Meses equivalentes na mesma atração.</p></div>
+            <div><span class="mini-label">Comparativo</span><h3 id="comparisonTitle" data-tip="yearCompare">Ano selecionado × anterior</h3><p>Meses equivalentes na mesma atração.</p></div>
           </div>
           <div class="chart-wrap"><canvas id="comparisonChart"></canvas></div>
         </article>
         <article class="panel season-panel">
           <div class="panel-head compact-head">
-            <div><span class="mini-label">Sazonalidade</span><h3>Perfil sazonal</h3><p>Índice do mês em relação à média histórica da atração.</p></div>
+            <div><span class="mini-label">Sazonalidade</span><h3 data-tip="seasonal">Perfil sazonal</h3><p>Índice do mês em relação à média do próprio ano, usando só anos completos.</p></div>
           </div>
           <div class="seasonality" id="seasonalityGrid"></div>
           <div class="season-legend"><span>Abaixo da média</span><div></div><span>Acima da média</span></div>
@@ -144,45 +144,50 @@
       <div class="section-intro compare-intro">
         <div>
           <span class="section-kicker">Comparação entre atrações</span>
-          <h2>Quem cresce, acelera e oscila mais</h2>
+          <h2 data-tip="compareSection">Quem cresce, acelera e oscila mais</h2>
         </div>
-        <p>Estes gráficos <strong>não respondem ao filtro de atração</strong>. O filtro de ano continua ativo.</p>
+        <p>Estes gráficos <strong>não respondem ao filtro de atração</strong>. O gráfico de linhas e o ranking usam a consulta conjunta (mesma escala, comparam nível); variação, momentum e volatilidade são relativos à série de cada item. O filtro de ano continua ativo.</p>
       </div>
       <div class="comparison-grid">
+        <article class="panel" id="parkCompareCard" style="grid-column:1/-1" hidden>
+          <div class="panel-head compact-head"><div><span class="mini-label">Evolução</span><h3 data-tip="parkLine">Interesse mensal dos atrativos na mesma escala</h3><p id="parkCompareNote"></p></div></div>
+          <div class="chart-wrap chart-tall"><canvas id="parkLineChart"></canvas></div>
+        </article>
         <article class="panel ranking-panel">
           <div class="panel-head compact-head">
-            <div><span class="mini-label">Ranking</span><h3>Interesse atual por atração</h3><p>Bondinhos Aéreos, Skyglass e Pé da Cascata no Brasil.</p></div>
+            <div><span class="mini-label">Ranking</span><h3 data-tip="ranking">Interesse atual: parque e atrações</h3><p>Consulta conjunta, mesma escala, no Brasil.</p></div>
           </div>
           <div class="chart-wrap chart-tall"><canvas id="rankingChart"></canvas></div>
         </article>
         <article class="panel">
-          <div class="panel-head compact-head"><div><span class="mini-label">YoY</span><h3>Variação anual por atração</h3><p>Ano selecionado contra o anterior.</p></div></div>
+          <div class="panel-head compact-head"><div><span class="mini-label">YoY</span><h3 data-tip="yoyChart">Variação anual por atração</h3><p>Ano selecionado contra o anterior (sem ano: últimos 12 meses contra os 12 anteriores).</p></div></div>
           <div class="chart-wrap"><canvas id="yoyChart"></canvas></div>
         </article>
         <article class="panel">
-          <div class="panel-head compact-head"><div><span class="mini-label">Momentum</span><h3>Quem está acelerando agora?</h3><p>Últimos três meses contra os três anteriores.</p></div></div>
+          <div class="panel-head compact-head"><div><span class="mini-label">Momentum</span><h3 data-tip="momentumChart">Quem está acelerando agora?</h3><p>Últimos três meses contra os mesmos meses do ano anterior.</p></div></div>
           <div class="chart-wrap"><canvas id="momentumChart"></canvas></div>
         </article>
         <article class="panel">
-          <div class="panel-head compact-head"><div><span class="mini-label">Estabilidade</span><h3>Volatilidade do interesse</h3><p>Quanto maior, mais oscilante é a série.</p></div></div>
+          <div class="panel-head compact-head"><div><span class="mini-label">Estabilidade</span><h3 data-tip="volChart">Volatilidade do interesse</h3><p>Oscilação mensal descontada a tendência. Quanto maior, mais irregular.</p></div></div>
           <div class="chart-wrap"><canvas id="volatilityChart"></canvas></div>
         </article>
       </div>
+          <p class="chart-footnote" id="lowVolumeFoot" hidden></p>
     </section>
 
     <section class="section-block diagnostic-section">
       <div class="section-intro">
-        <div><span class="section-kicker">Diagnóstico</span><h2>Meses que merecem investigação</h2></div>
+        <div><span class="section-kicker">Diagnóstico</span><h2 data-tip="diagnostic">Meses que merecem investigação</h2></div>
         <p>Picos ajudam a localizar períodos para cruzar com campanhas, férias, eventos e notícias.</p>
       </div>
       <div class="diagnostic-grid">
         <article class="panel peaks-panel">
-          <div class="panel-head compact-head"><div><span class="mini-label">Top meses</span><h3>Maiores índices do período</h3></div></div>
+          <div class="panel-head compact-head"><div><span class="mini-label">Top meses</span><h3 data-tip="peaks">Maiores índices do período</h3></div></div>
           <div class="peaks" id="peaksTable"></div>
         </article>
         <article class="insight-panel">
           <span class="section-kicker light-kicker">Leitura automática</span>
-          <h3>O que o período está sinalizando?</h3>
+          <h3 data-tip="insight">O que o período está sinalizando?</h3>
           <p id="autoInsight">—</p>
         </article>
       </div>
@@ -195,17 +200,19 @@
       </summary>
       <div class="method-body">
         <div class="method-grid">
-          <article><span>01</span><h3>Por que comparar atrações e não países?</h3><p>Este dashboard olha apenas para o mercado <strong>Brasil</strong> e compara o interesse de busca entre as três atrações do parque: Bondinhos Aéreos, Skyglass e Pé da Cascata.</p></article>
+          <article><span>01</span><h3>Recorte do dashboard</h3><p>O dashboard olha apenas para o mercado <strong>Brasil</strong>: o Parque do Caracol e quatro atrações (Skyglass, Snowland, Bondinhos Canela e Pé da Cascata).</p></article>
           <article><span>02</span><h3>Tema × termo de pesquisa</h3><p>Um <strong>termo</strong> acompanha uma expressão pesquisada. Um <strong>tema</strong> agrupa pesquisas relacionadas ao mesmo conceito. A composição exata do agrupamento não é exibida pelo Google como lista fechada.</p></article>
           <article><span>03</span><h3>O que significa 0–100?</h3><p>Os valores são normalizados. <strong>100 representa o maior interesse relativo dentro da série analisada</strong>; não significa 100 buscas. Os demais pontos são escalados em relação a esse comportamento.</p></article>
-          <article><span>04</span><h3>Como comparar as atrações?</h3><p>Como as três atrações foram coletadas juntas, no mesmo mercado (Brasil), os índices são diretamente comparáveis entre si nos gráficos de ranking, variação anual, momentum e volatilidade.</p></article>
+          <article><span>04</span><h3>Duas leituras: sozinho e junto</h3><p>O Google reescala cada consulta de 0 a 100. Por isso cada item é coletado <strong>sozinho</strong> (o 100 é o pico dele mesmo; serve para ver tendência, sazonalidade e variação) e também <strong>junto com os outros quatro</strong> (o 100 é o maior pico entre todos; só essa consulta permite comparar o tamanho de um item com o de outro). Não compare números de consultas diferentes.</p></article>
         </div>
+        <div class="method-note"><strong>Como os indicadores são calculados:</strong> o Google entrega dados semanais; aqui eles viram média mensal. <em>Sazonalidade</em>: cada ano é dividido pela própria média e só anos completos entram (o crescimento do ano não vira sazonalidade). <em>Momentum</em>: últimos 3 meses contra os mesmos meses do ano anterior. <em>Variação anual</em>: meses equivalentes do ano selecionado contra o anterior (sem ano: 12 meses contra 12 meses). <em>Volatilidade</em>: oscilação em torno da tendência linear, relativa à média.</div>
+        <div class="method-note"><strong>Limites dos dados:</strong> o Google Trends é uma amostra e pode variar levemente de um dia para o outro; os índices medem interesse relativo, não buscas nem visitas; os temas <em>Parque do Caracol</em> e as atrações podem se sobrepor (o Google não mostra a composição dos temas); séries com média abaixo de 5 na escala conjunta são marcadas com * por terem baixo volume.</div>
         <div class="method-note"><strong>Leitura recomendada:</strong> use Trends como indicador de atenção digital e combine com visitação, vendas, origem dos visitantes e demais dados de mercado sempre que possível.</div>
       </div>
     </details>
 
     <footer>
-      <span>Google Trends · Brasil · Bondinhos Aéreos, Skyglass e Pé da Cascata</span>
+      <span>Google Trends · Brasil · Parque do Caracol, Skyglass, Snowland, Bondinhos Canela e Pé da Cascata</span>
       <span>Base atualizada pelo arquivo <code>data/dados.xlsx</code></span>
     </footer>
   </main>
@@ -213,6 +220,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="data.js"></script>
-  <script src="caracol-premium.js?v=20260904-1"></script>
+  <script src="comparison-data.js"></script>
+  <script src="caracol-premium.js?v=20261013-1"></script>
 </body>
 </html>
