@@ -1,6 +1,6 @@
 # Dashboard Google Trends — Parque do Caracol
 
-Dashboard estático para GitHub Pages com atualização mensal automática (mesma arquitetura do dashboard do Bondinho).
+Dashboard estático para GitHub Pages com atualização mensal automática.
 
 ## O que é coletado (Brasil, via pytrends)
 
