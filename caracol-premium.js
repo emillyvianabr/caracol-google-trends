@@ -1,5 +1,6 @@
 let D = window.TRENDS_DATA || {series:[],term:'Parque do Caracol',updated:null};
-const ORANGE = "#004B13", ORANGE2 = "#7FA98A", DARK = "#00320C", MUTED="#AAB0B7", GREEN="#23885A", RED="#C94A3A";
+// Parque do Caracol (verde) + Grupo Iter (apoio)
+const PRIMARY = "#004B13", PRIMARY_SOFT = "#7FA98A", PRIMARY_DARK = "#00320C", MUTED="#7693A1", GREEN="#23885A", RED="#EB4A75", INK="#233744", GRID="#E8EEF1", NEG_BAR="#B1C6CE";
 const months = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 let charts = {};
 
@@ -28,7 +29,7 @@ function updateLastUpdated(){
 // Cada item foi coletado SOZINHO (escala própria 0-100) em D.series.
 // A consulta com os 5 JUNTOS (escala comum) fica em CMP e é a única usada para comparar níveis.
 const ATTRACTION_ORDER = ["PARQUE","SKYGLASS","SNOWLAND","BONDINHOS","CASCATA"];
-const SERIES_COLORS = {PARQUE:"#004B13",SKYGLASS:"#3B82C4",SNOWLAND:"#8E6CC9",BONDINHOS:"#E08A2E",CASCATA:"#C9A227"};
+const SERIES_COLORS = {PARQUE:"#004B13",SKYGLASS:"#1D6DB6",SNOWLAND:"#62BAB6",BONDINHOS:"#E8801E",CASCATA:"#EB4A75"};
 // Comparativo Parque × atrações: 5 itens na MESMA consulta (escala comum)
 let CMP = window.CARACOL_COMPARISON_DATA || {series:[]};
 function setupFilters(){
@@ -46,18 +47,18 @@ function setupFilters(){
   endDate.min = dates[0].slice(0,7); endDate.max = dates.at(-1).slice(0,7);
 }
 
-Chart.defaults.font.family = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
-Chart.defaults.color = "#66707B";
+Chart.defaults.font.family = 'Stolzl, system-ui, -apple-system, "Segoe UI", sans-serif';
+Chart.defaults.color = "#53778B";
 Chart.defaults.font.size = 12;
 
 function destroy(name){ if(charts[name]) charts[name].destroy(); }
 function standardOptions(horizontal=false){
   return {
     responsive:true, maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{backgroundColor:"#1D232A",padding:11,titleFont:{weight:"700"}}},
+    plugins:{legend:{display:false},tooltip:{backgroundColor:INK,padding:11,titleFont:{weight:"700"}}},
     scales:{
       x:{grid:{display:false},border:{display:false},ticks:{maxRotation:0,autoSkip:true}},
-      y:{grid:{color:"#EEF0F2"},border:{display:false},beginAtZero:true}
+      y:{grid:{color:GRID},border:{display:false},beginAtZero:true}
     }
   };
 }
@@ -67,7 +68,7 @@ function lineOptions(){
   o.scales.y.title={display:true,text:"Índice de interesse"};
   return o;
 }
-function barColors(values){ return values.map(v=>v>=0 ? ORANGE : "#c5c8cc"); }
+function barColors(values){ return values.map(v=>v>=0 ? PRIMARY : NEG_BAR); }
 
 const LOW_VOLUME = 5; // média < 5 na escala conjunta (líder = 100) => baixo volume de busca
 function cmpMean(code){ const v=cmpRows(code).map(r=>r.value); return v.length?mean(v):NaN; }
@@ -167,7 +168,7 @@ function updateTrend(){
   charts.trend=new Chart(document.querySelector("#trendChart"),{
     type:"line",
     data:{labels:chartRows.map(r=>new Date(r.date+"T00:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"})),
-      datasets:[{data:chartRows.map(r=>r.value),borderColor:ORANGE,backgroundColor:"rgba(0,75,19,.08)",pointRadius:2,pointHoverRadius:5,borderWidth:2.4,tension:.28,fill:true}]},
+      datasets:[{data:chartRows.map(r=>r.value),borderColor:PRIMARY,backgroundColor:"rgba(0,75,19,.08)",pointRadius:2,pointHoverRadius:5,borderWidth:2.4,tension:.28,fill:true}]},
     options:lineOptions()
   });
 }
@@ -186,7 +187,7 @@ function updateComparison(){
   charts.comparison=new Chart(document.querySelector("#comparisonChart"),{
     type:"line",
     data:{labels:months,datasets:[
-      {label:String(year),data:months.map((_,i)=>byCur[i+1]??null),borderColor:ORANGE,backgroundColor:ORANGE,pointRadius:3,borderWidth:2.8,tension:.2},
+      {label:String(year),data:months.map((_,i)=>byCur[i+1]??null),borderColor:PRIMARY,backgroundColor:PRIMARY,pointRadius:3,borderWidth:2.8,tension:.2},
       {label:String(year-1),data:months.map((_,i)=>byPrev[i+1]??null),borderColor:MUTED,backgroundColor:MUTED,pointRadius:2,borderWidth:2,tension:.2,borderDash:[6,5]}
     ]},
     options:{...lineOptions(),plugins:{...lineOptions().plugins,legend:{display:true,position:"bottom",labels:{usePointStyle:true,boxWidth:8}}}}
@@ -256,15 +257,15 @@ function makeBar(id,key,data,isPct=false){
   destroy(key);
   charts[key]=new Chart(document.querySelector(id),{
     type:"bar",
-    data:{labels:data.map(x=>x.name),datasets:[{data:data.map(x=>isPct?x.v*100:x.v),backgroundColor:isPct?barColors(data.map(x=>x.v)):ORANGE,borderRadius:7,borderSkipped:false,barThickness:data.length>=10?14:18,maxBarThickness:20}]},
+    data:{labels:data.map(x=>x.name),datasets:[{data:data.map(x=>isPct?x.v*100:x.v),backgroundColor:isPct?barColors(data.map(x=>x.v)):PRIMARY,borderRadius:7,borderSkipped:false,barThickness:data.length>=10?14:18,maxBarThickness:20}]},
     options:{...standardOptions(),indexAxis:data.length>=6?"y":"x",
-      plugins:{legend:{display:false},tooltip:{backgroundColor:"#1D232A",callbacks:{label:(ctx)=>isPct?`${ctx.raw>=0?"+":""}${fmt(ctx.raw)}%`:fmt(ctx.raw)}}},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:INK,callbacks:{label:(ctx)=>isPct?`${ctx.raw>=0?"+":""}${fmt(ctx.raw)}%`:fmt(ctx.raw)}}},
       scales:data.length>=6?{
-        x:{grid:{color:"#EEF0F2"},border:{display:false},beginAtZero:true,ticks:{font:{size:11},padding:6,callback:v=>isPct?`${v}%`:v}},
+        x:{grid:{color:GRID},border:{display:false},beginAtZero:true,ticks:{font:{size:11},padding:6,callback:v=>isPct?`${v}%`:v}},
         y:{grid:{display:false},border:{display:false},ticks:{font:{size:11},padding:7}}
       }:{
         x:{grid:{display:false},border:{display:false},ticks:{font:{size:11},padding:7}},
-        y:{grid:{color:"#EEF0F2"},border:{display:false},beginAtZero:true,ticks:{font:{size:11},padding:6,callback:v=>isPct?`${v}%`:v}}
+        y:{grid:{color:GRID},border:{display:false},beginAtZero:true,ticks:{font:{size:11},padding:6,callback:v=>isPct?`${v}%`:v}}
       }
     }
   });
@@ -319,7 +320,7 @@ function updateParkComparison(){
       borderColor:SERIES_COLORS[c],backgroundColor:SERIES_COLORS[c],
       borderWidth:c==="PARQUE"?3.5:2,pointRadius:0,pointHoverRadius:4,tension:.3,spanGaps:true
     }))},
-    options:{...standardOptions(),plugins:{legend:{display:true,position:"bottom",labels:{usePointStyle:true,boxWidth:8}},tooltip:{backgroundColor:"#1D232A",mode:"index",intersect:false}},interaction:{mode:"index",intersect:false}}
+    options:{...standardOptions(),plugins:{legend:{display:true,position:"bottom",labels:{usePointStyle:true,boxWidth:8}},tooltip:{backgroundColor:INK,mode:"index",intersect:false}},interaction:{mode:"index",intersect:false}}
   });
   const latest=order.map(c=>{
     const r=rows.filter(x=>x.marketCode===c).sort((a,b)=>a.date.localeCompare(b.date)).at(-1);
@@ -548,6 +549,11 @@ document.querySelector("#downloadFilteredCsv")?.addEventListener("click",()=>{
 if(D.series.length){
   setupFilters();
   updateAll();
+}
+// Canvas não dispara o download da fonte: carrega a Stolzl e redesenha os gráficos.
+if(document.fonts&&document.fonts.load){
+  Promise.all([document.fonts.load('400 12px Stolzl'),document.fonts.load('700 12px Stolzl')])
+    .then(()=>{ if(D.series.length) updateAll(); }).catch(()=>{});
 }
 loadRepositoryWorkbook().then(ok=>{
   if(!ok && !D.series.length){

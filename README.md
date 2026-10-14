@@ -49,3 +49,12 @@ Se a coleta ou a validação falhar, nenhum arquivo é substituído. Ative em Se
 Envie uma planilha compatível em `data/manual/dados.xlsx`; ela tem prioridade até ser removida.
 
 > O pytrends usa endpoints não oficiais do Google Trends e pode precisar de manutenção.
+
+## Identidade visual
+
+Combina o **Parque do Caracol** e o **Grupo Iter**:
+
+- **Caracol:** símbolo "C" (`assets/caracol-simbolo.png`), verde `#004B13` como cor principal e creme `#EEEDD9` nas superfícies de destaque.
+- **Grupo Iter:** logo e etiqueta "Iter Parques", tipografia Stolzl (`assets/fonts/`), texto em `#233744` e acentos teal `#62BAB6`, azul `#1D6DB6` e rosa `#EB4A75` (este último para valores negativos).
+
+As cores dos gráficos ficam no topo de `caracol-premium.js`; as demais em `:root` de `caracol-premium.css`.
